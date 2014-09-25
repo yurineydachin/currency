@@ -1,0 +1,5 @@
+*   *   *   *   *   php cli.php daemon/flow/start >> /tmp/daemon_flow.log$
+*   *   *   *   *   php cli.php daemon/agregate >> /tmp/daemon_agregate.log$
+*   *   *   0   *   php cli.php daemon/dropagregate/m1 >> /tmp/daemon_dropagregate.log$
+*   *   *   0   *   php cli.php daemon/dropagregate/m5 >> /tmp/daemon_dropagregate.log$
+*   *   *   0   *   php cli.php daemon/dropagregate/h1 >> /tmp/daemon_dropagregate.log$
