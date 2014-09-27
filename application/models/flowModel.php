@@ -26,12 +26,12 @@ class FlowModel extends CI_Model
         }
 
         $save['added_at'] = date('Y-m-d ') . $save['added_at'];
+        $save['tool']     = strtoupper($save['tool']);
         return $this->db->insert('flow', $save);
     }
 
-    public function aggregate($group = 'm1')
+    public function aggregate($group = 'm1', array $params = array())
     {
-        $groupBy = ' GROUP BY tool';
         $groupConds = array(
             'm1' => array('t_m1'),
             'm5' => array('t_m5'),
@@ -48,26 +48,48 @@ class FlowModel extends CI_Model
             throw new AggregateKindException('Unknow kind aggregate: ' . $group);
         }
 
+        $groupBy = array('tool');
         if (in_array('ym', $groupCond)) {
-            $groupBy .= ', EXTRACT(YEAR_MONTH from added_at)';
+            $groupBy[] = 'EXTRACT(YEAR_MONTH from added_at)';
         }
         if (in_array('y1', $groupCond)) {
-            $groupBy .= ', EXTRACT(YEAR from added_at)';
+            $groupBy[] = 'EXTRACT(YEAR from added_at)';
         }
         if (in_array('w1', $groupCond)) {
-            $groupBy .= ', EXTRACT(WEEK from added_at)';
+            $groupBy[] = 'EXTRACT(WEEK from added_at)';
         }
         if (in_array('t_d1', $groupCond)) {
-            $groupBy .= ', FLOOR(UNIX_TIMESTAMP(added_at)/ 86400)';
+            $groupBy[] = 'FLOOR(UNIX_TIMESTAMP(added_at)/ 86400)';
         }
         if (in_array('t_h1', $groupCond)) {
-            $groupBy .= ', FLOOR(UNIX_TIMESTAMP(added_at)/ 3600)';
+            $groupBy[] = 'FLOOR(UNIX_TIMESTAMP(added_at)/ 3600)';
         }
         if (in_array('t_m5', $groupCond)) {
-            $groupBy .= ', FLOOR(UNIX_TIMESTAMP(added_at)/ 300)';
+            $groupBy[] = 'FLOOR(UNIX_TIMESTAMP(added_at)/ 300)';
         }
         if (in_array('t_m1', $groupCond)) {
-            $groupBy .= ', FLOOR(UNIX_TIMESTAMP(added_at)/ 60)';
+            $groupBy[] = 'FLOOR(UNIX_TIMESTAMP(added_at)/ 60)';
+        }
+        if ($groupBy) {
+            $groupBy = ' GROUP BY ' . implode(', ', $groupBy);
+        } else {
+            $groupBy = '';
+        }
+
+        $where = array();
+        if (isset($params['start'])) {
+            $where[] = " added_at >= " . $this->db->escape(date('Y-m-d H:i:s', $params['start'])) . "";
+        }
+        if (isset($params['finish'])) {
+            $where[] = " added_at <= " . $this->db->escape(date('Y-m-d H:i:s', $params['finish'])) . "";
+        }
+        if (isset($params['tool'])) {
+            $where[] = " tool = " . $this->db->escape($params['tool']) . "";
+        }
+        if ($where) {
+            $where = ' WHERE ' . implode(' AND ', $where);
+        } else {
+            $where = '';
         }
 
         $field = self::DEFAULT_AGGREGATE_FIELD;
@@ -80,6 +102,7 @@ from
   min(id) as min_id,
   max(id) as max_id
 FROM curr_flow
+$where
 $groupBy) t
 inner join curr_flow b1 on b1.id = t.min_id
 inner join curr_flow b2 on b2.id = t.max_id

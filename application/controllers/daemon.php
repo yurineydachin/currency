@@ -1,6 +1,6 @@
 <?php if ( ! defined('BASEPATH')) exit('No direct script access allowed');
 
-require dirname(__FILE__) . '/../daemons/flow.php';
+require_once dirname(__FILE__) . '/../daemons/flow.php';
 
 class Daemon extends CI_Controller
 {
@@ -60,10 +60,10 @@ class Daemon extends CI_Controller
         $this->load->model('AggregateD1');
 
         $dataM1 = $this->FlowModel->aggregate('m1');
-        $this->AggregateM1->processData($dataM1);
-        $this->AggregateM5->processData($dataM1);
-        $this->AggregateH1->processData($dataM1);
-        $this->AggregateD1->processData($dataM1);
+        $this->AggregateM1->update($dataM1);
+        $this->AggregateM5->update($dataM1);
+        $this->AggregateH1->update($dataM1);
+        $this->AggregateD1->update($dataM1);
 
         $lastItem = array_pop($dataM1);
         $maxId = 0;

@@ -2,19 +2,59 @@
 
 abstract class AggregateModel extends CI_Model
 {
+    const DEFAULT_LIMIT  = 50;
+    const DEFAULT_OFFSET = 0;
+
     protected $group;
     protected $groupRound;
     protected $dataAge = 0; //days
 
-    public function processData($data)
+    public function getActualityData($tool)
+    {
+        $params = array(
+            'limit' => self::DEFAULT_LIMIT,
+        );
+        if ($tool) {
+            $params['tool'] = $tool;
+        }
+        $dataSaved = $this->getDataSaved($params);
+        $timeOpen = $dataSaved ? key($dataSaved) : null;
+
+        $params = array();
+        if ($timeOpen) {
+            $params['start'] = $timeOpen;
+            $params['start_h'] = date('Y-m-d H:i:s', $timeOpen);
+        }
+        $params['finish'] = time();
+        if ($tool) {
+            $params['tool'] = $tool;
+        }
+
+        $data = $this->FlowModel->aggregate('m1', $params);
+        $convertedData = $this->convertData($data);
+
+        $result = $this->mergeDataToSave($convertedData, $dataSaved, false);
+        if (count($result) > self::DEFAULT_LIMIT)
+        {
+            return array_slice($result, (-1) * self::DEFAULT_LIMIT);
+        }
+        else
+        {
+            return $result;
+        }
+    }
+
+    public function update($data)
     {
         $convertedData = $this->convertData($data);
         $dates = array_keys($convertedData);
-        $timeStart  = min($dates);
-        $timeFinish = max($dates);
 
-        $dataSaved  = $this->getDataSaved($timeStart, $timeFinish);
-        $mergedData = $this->mergeDataToSave($convertedData, $dataSaved);
+        $params = array(
+            'start'  => min($dates),
+            'finish' => max($dates),
+        );
+        $dataSaved  = $this->getDataSaved($params);
+        $mergedData = $this->mergeDataToSave($convertedData, $dataSaved, true);
         $this->saveData($mergedData);
     }
 
@@ -48,13 +88,27 @@ abstract class AggregateModel extends CI_Model
         return $res;
     }
 
-    protected function getDataSaved($start, $finish)
+    public function getDataSaved(array $params)
     {
         $this->db->select('id, tool, time_at, open, close, high, low')
             ->from('aggregate_' . $this->group)
-            ->where('time_at >=', date('Y-m-d H:i:s', $start))
-            ->where('time_at <=', date('Y-m-d H:i:s', $finish))
-            ->order_by('id', 'asc');
+            ->order_by('id', 'desc');
+
+        if (isset($params['start'])) {
+            $this->db->where('time_at >=', date('Y-m-d H:i:s', $params['start']));
+        }
+        if (isset($params['finish'])) {
+            $this->db->where('time_at <=', date('Y-m-d H:i:s', $params['finish']));
+        }
+        if (isset($params['tool'])) {
+            $this->db->where('tool', $params['tool']);
+        }
+        if (isset($params['limit']) || isset($params['offset']))
+        {
+            $params['limit']  = isset($params['limit'])  ? $params['limit']  : self::DEFAULT_LIMIT;
+            $params['offset'] = isset($params['offset']) ? $params['offset'] : self::DEFAULT_OFFSET;
+            $this->db->limit($params['limit'], $params['offset']);
+        }
 
         $res = array();
         foreach ($this->db->get()->result() as $row)
@@ -73,10 +127,10 @@ abstract class AggregateModel extends CI_Model
                 'low'     => (float) $row->low,
             );
         }
-        return $res;
+        return array_reverse($res, true); // order ASC - same flowModel->aggregate
     }
 
-    protected function mergeDataToSave($dataNew, $dataSaved)
+    protected function mergeDataToSave($dataNew, $dataSaved, $toUpdate = true)
     {
         $keys = array_unique(array_merge(array_keys($dataNew), array_keys($dataSaved)));
         sort($keys);
@@ -95,7 +149,11 @@ abstract class AggregateModel extends CI_Model
             }
             elseif (! isset($dataNew[$key]))
             {
-                // no update dataSaved
+                if ($toUpdate) {
+                    // no update dataSaved
+                } else {
+                    $res[$key] = $dataSaved[$key];
+                }
             }
             else
             {
@@ -108,22 +166,20 @@ abstract class AggregateModel extends CI_Model
                     }
                     elseif (! isset($dataNew[$key][$tool]))
                     {
-                        // no update dataSaved
+                        if ($toUpdate) {
+                            // no update dataSaved
+                        } else {
+                            $res[$key][$tool] = $dataSaved[$key][$tool];
+                        }
                     }
                     else
                     {
                         $new   = $dataNew[$key][$tool];
                         $saved = $dataSaved[$key][$tool];
-                        if (   $new['close'] != $saved['close']
-                            || $new['low']   != $saved['low']
-                            || $new['high']  != $saved['high'])
-                        {
-                            $saved['close'] = $new['close'];
-                            $saved['high']  = max($saved['high'], $new['high']);
-                            $saved['low']   = min($saved['low'],  $new['low']);
-                            $res[$key][$tool] = $saved;
-                        }
-                        // else no update dataSaved
+                        $saved['close'] = $new['close'];
+                        $saved['high']  = max($saved['high'], $new['high']);
+                        $saved['low']   = min($saved['low'],  $new['low']);
+                        $res[$key][$tool] = $saved;
                     }
                 }
             }
@@ -172,5 +228,9 @@ abstract class AggregateModel extends CI_Model
 }
 
 class AggregateKindException extends Exception
+{
+}
+
+class AggregateDateIntervalException extends Exception
 {
 }
